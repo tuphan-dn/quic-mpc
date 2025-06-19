@@ -20,4 +20,5 @@ jobs:
         run: |
           git checkout --orphan release
           git reset --hard
+          cp ./target/release/quic-mpc ./quic-mpc
           ls -la
