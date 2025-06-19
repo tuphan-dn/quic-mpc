@@ -16,6 +16,10 @@ jobs:
           fetch-depth: 0
       - name: Build target/release
         run: cargo build --release
+      - name: Configure git user
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
       - name: Push the release
         run: |
           git checkout --orphan release
