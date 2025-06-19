@@ -1,14 +1,15 @@
 [package]
-name = "rust-libp2p-chat"
+name = "quic-mpc"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version = "1.35", features = ["full"] }
-futures = "0.3.30"
-libp2p = { version = "0.53.2", features = [
+tokio = { version = "1.45.1", features = ["full"] }
+clap = { version = "4.5.40", features = ["derive"] }
+tracing = "0.1.41"
+libp2p = { version = "0.55.0", features = [
   "tokio",
   "gossipsub",
   "kad",
@@ -21,8 +22,7 @@ libp2p = { version = "0.53.2", features = [
   "rsa",
   "autonat",
 ] }
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-clap = { version = "4.4.12", features = ["derive"] }
-bs58 = "0.5.0"
+futures = "0.3.31"
+bs58 = "0.5.1"
 sha3 = "0.10.8"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }

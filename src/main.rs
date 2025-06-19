@@ -1,12 +1,12 @@
 use cli::{Args, Parser};
 use futures::stream::StreamExt;
 use libp2p::{
-  autonat, gossipsub, identify,
+  SwarmBuilder, autonat, gossipsub, identify,
   identity::Keypair,
-  kad::{self, store, BootstrapOk, GetClosestPeersOk, Mode},
+  kad::{self, BootstrapOk, GetClosestPeersOk, Mode, store},
   noise,
   swarm::{NetworkBehaviour, SwarmEvent},
-  tcp, yamux, SwarmBuilder,
+  tcp, yamux,
 };
 use std::{error::Error, time::Duration};
 use tokio::{io, io::AsyncBufReadExt, select};
@@ -16,7 +16,7 @@ pub mod cli;
 pub mod utils;
 
 #[derive(NetworkBehaviour)]
-struct MyBehaviour {
+struct Behaviour {
   identify: identify::Behaviour,
   kademlia: kad::Behaviour<store::MemoryStore>,
   autonat: autonat::Behaviour,
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
           .build()?,
       )?;
       // Return my behavour
-      Ok(MyBehaviour {
+      Ok(Behaviour {
         identify,
         kademlia,
         autonat,
@@ -116,7 +116,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     select! {
       Ok(Some(msg)) = stdin.next_line() => {
         // Publish messages
-        if let Err(er)=  swarm.behaviour_mut().gossipsub.publish(topic.clone(), msg.as_bytes()){
+        if let Err(er) = swarm.behaviour_mut().gossipsub.publish(topic.clone(), msg.as_bytes()) {
           println!("❌ Failed to publish the message: {er}");
         } else {
           println!("🛫 .................. Sent");
@@ -140,9 +140,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
           println!("💔 Disconnected to {peer_id}");
         }
         // Identify
-        SwarmEvent::Behaviour(MyBehaviourEvent::Identify(identify::Event::Received {
+        SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Received {
           peer_id,
           info,
+          ..
         })) => {
           println!("👤 Identify new peer: {peer_id}");
           if info.protocols.iter().any(|p| *p == kad::PROTOCOL_NAME) {
@@ -152,7 +153,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
           }
         }
         // Kademlia
-        SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed {
+        SwarmEvent::Behaviour(BehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed {
           result: kad::QueryResult::Bootstrap(Ok(BootstrapOk { peer: peer_id, .. })),
           ..
         })) => {
@@ -160,14 +161,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("🚀 Kademlia bootstrapped completely: {peer_id:?}");
           }
         }
-        SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed {
+        SwarmEvent::Behaviour(BehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed {
           result: kad::QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { peers, .. })),
           ..
         })) => {
           println!("🔍 Kademlia discovered new peers: {peers:?}");
         }
         // Gossipsub
-        SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(gossipsub::Event::Message {
+        SwarmEvent::Behaviour(BehaviourEvent::Gossipsub(gossipsub::Event::Message {
           propagation_source: peer_id,
           message,
           ..
