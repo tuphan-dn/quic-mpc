@@ -3,6 +3,8 @@ name: Automatic Deployment
 on:
   push:
     branches: master
+permissions:
+  contents: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,8 +19,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Configure git user
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git config --global user.name 'github-actions'
+          git config --global user.email 'github-actions@users.noreply.github.com'
       - name: Build target/release
         run: cargo build --release
       - name: Push the release
