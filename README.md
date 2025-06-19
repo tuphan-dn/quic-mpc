@@ -3,19 +3,19 @@
 To connect the boostrap node:
 
 ```
-cargo run -- --bootstrap /dns/<name>.fly.dev/tcp/8080/p2p/<key> --silent
+cargo run -- --bootstrap /ip4/<public_ip>/tcp/8080/p2p/<key> --silent
 ```
 
 For example,
 
 ```
-cargo run -- --bootstrap /dns/p2p-bootstrap.fly.dev/tcp/8080/p2p/12D3KooWG8YCUWuu86jtyF3Dbe7Uc7wChR98EYAKzPcC4VK2Y8jy --silent
+cargo run -- --bootstrap /ip4/13.238.141.54/tcp/8080/p2p/12D3KooWMqaRrDRrVbJrWUw15KJRVAmibKaygBdaNMy7EZdF8YLm --silent
 ```
 
 Bootstrap table
 
-| Domain        | Key                                                  |
+| IPv4          | Key                                                  |
 | ------------- | ---------------------------------------------------- |
-| p2p-bootstrap | 12D3KooWG8YCUWuu86jtyF3Dbe7Uc7wChR98EYAKzPcC4VK2Y8jy |
+| 13.238.141.54 | 12D3KooWMqaRrDRrVbJrWUw15KJRVAmibKaygBdaNMy7EZdF8YLm |
 | master-1      | TBD                                                  |
 | master-2      | TBD                                                  |

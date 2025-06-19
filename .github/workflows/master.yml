@@ -20,7 +20,7 @@ jobs:
       - name: Build target/release
         run: cargo build --release
       - name: Write scripts
-        run: echo "./quic-mpc --port 8080 --seed bootstrap-1" > quic-mpc.sh
+        run: echo "./quic-mpc --port 8080 --seed bootstrap-1 --silent" > quic-mpc.sh
       - name: Push the release
         run: |
           git checkout --orphan release
