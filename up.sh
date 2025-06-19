@@ -1,0 +1,1 @@
+cargo run -- --port 8080 --seed bootstrap-node-1
