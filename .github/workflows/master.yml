@@ -17,4 +17,4 @@ jobs:
       - name: Build target
         run: cargo build --release
       - name: Inspect
-        run: cd ./target/release ls -la
+        run: cd ./target/release && ls -la
