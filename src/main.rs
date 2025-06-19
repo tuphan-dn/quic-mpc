@@ -4,9 +4,8 @@ use libp2p::{
   SwarmBuilder, autonat, gossipsub, identify,
   identity::Keypair,
   kad::{self, BootstrapOk, GetClosestPeersOk, Mode, store},
-  noise,
+  quic,
   swarm::{NetworkBehaviour, SwarmEvent},
-  tcp, yamux,
 };
 use std::{error::Error, time::Duration};
 use tokio::{io, io::AsyncBufReadExt, select};
@@ -50,11 +49,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
   let mut swarm = SwarmBuilder::with_existing_identity(keypair.clone())
     .with_tokio()
-    .with_tcp(
-      tcp::Config::default(),
-      noise::Config::new,
-      yamux::Config::default,
-    )?
+    .with_quic()
     .with_dns()?
     .with_behaviour(|key| {
       // Create a Identify behaviour.
@@ -91,7 +86,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
   // Peer node: Listen on all interfaces and whatever port the OS assigns
   swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server));
-  swarm.listen_on(format!("/ip4/0.0.0.0/tcp/{port}").parse()?)?;
+  swarm.listen_on(format!("/ip4/0.0.0.0/udp/{port}/quic-v1").parse()?)?;
 
   if let Some(bootstrap_addr) = bootstrap {
     // Add peers to the DHT

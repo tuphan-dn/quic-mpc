@@ -3,13 +3,13 @@
 To connect the boostrap node:
 
 ```
-cargo run -- --bootstrap /ip4/<public_ip>/tcp/8080/p2p/<key> --silent
+cargo run -- --bootstrap /ip4/<public_ip>/udp/8081/quic-v1/p2p/<key> --silent
 ```
 
 For example,
 
 ```
-cargo run -- --bootstrap /ip4/13.238.141.54/tcp/8080/p2p/12D3KooWMqaRrDRrVbJrWUw15KJRVAmibKaygBdaNMy7EZdF8YLm --silent
+cargo run -- --bootstrap /ip4/13.238.141.54/udp/8081/quic-v1/p2p/12D3KooWMqaRrDRrVbJrWUw15KJRVAmibKaygBdaNMy7EZdF8YLm --silent
 ```
 
 Bootstrap table
