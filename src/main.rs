@@ -1,10 +1,10 @@
-use clap::Parser;
+use cli::{Args, Parser};
 use futures::stream::StreamExt;
 use libp2p::{
   autonat, gossipsub, identify,
   identity::Keypair,
   kad::{self, store, BootstrapOk, GetClosestPeersOk, Mode},
-  noise, ping,
+  noise,
   swarm::{NetworkBehaviour, SwarmEvent},
   tcp, yamux, SwarmBuilder,
 };
@@ -12,28 +12,11 @@ use std::{error::Error, time::Duration};
 use tokio::{io, io::AsyncBufReadExt, select};
 use tracing_subscriber::EnvFilter;
 
+pub mod cli;
 pub mod utils;
-
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-  /// If seed is provided, it will be used to create the keypair.
-  #[arg(short, long)]
-  seed: Option<String>,
-  /// Start with a bootstrap node. If not provided, the current node will become a bootstrap node.
-  #[arg(short, long)]
-  bootstrap: Option<String>,
-  /// Port.
-  #[arg(short, long, default_value_t = 0)]
-  port: u16,
-  /// Do not print fallback logs.
-  #[arg(long, default_value_t = false)]
-  silent: bool,
-}
 
 #[derive(NetworkBehaviour)]
 struct MyBehaviour {
-  ping: ping::Behaviour, // To keep the fly alive when connecting
   identify: identify::Behaviour,
   kademlia: kad::Behaviour<store::MemoryStore>,
   autonat: autonat::Behaviour,
@@ -74,8 +57,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )?
     .with_dns()?
     .with_behaviour(|key| {
-      // Create a Ping behaviour
-      let ping = ping::Behaviour::default();
       // Create a Identify behaviour.
       let identify = identify::Behaviour::new(identify::Config::new(
         "/ipfs/id/1.0.0".to_string(),
@@ -99,7 +80,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
       )?;
       // Return my behavour
       Ok(MyBehaviour {
-        ping,
         identify,
         kademlia,
         autonat,
