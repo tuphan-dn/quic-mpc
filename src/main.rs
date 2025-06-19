@@ -4,7 +4,6 @@ use libp2p::{
   SwarmBuilder, autonat, gossipsub, identify,
   identity::Keypair,
   kad::{self, BootstrapOk, GetClosestPeersOk, Mode, store},
-  quic,
   swarm::{NetworkBehaviour, SwarmEvent},
 };
 use std::{error::Error, time::Duration};
@@ -58,10 +57,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         keypair.public(),
       ));
       // Create a Kademlia behaviour.
-      let mut cfg = kad::Config::default();
-      cfg.set_query_timeout(Duration::from_secs(5 * 60));
-      let store = store::MemoryStore::new(key.public().to_peer_id());
-      let kademlia = kad::Behaviour::with_config(key.public().to_peer_id(), store, cfg);
+      let kademlia = kad::Behaviour::new(
+        key.public().to_peer_id(),
+        store::MemoryStore::new(key.public().to_peer_id()),
+      );
       // Create a AutoNAT behaviour.
       let autonat = autonat::Behaviour::new(key.public().to_peer_id(), Default::default());
       // Create a Gossipsub behaviour.
@@ -102,7 +101,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
   // Read full lines from stdin
   let mut stdin = io::BufReader::new(io::stdin()).lines();
-  let topic = gossipsub::IdentTopic::new("desnet-the-room");
+  let topic = gossipsub::IdentTopic::new("quic-the-room");
   swarm.behaviour_mut().gossipsub.subscribe(&topic)?;
   println!("💻 Type to send messages to others here:");
 
