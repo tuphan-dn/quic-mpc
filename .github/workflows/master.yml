@@ -12,20 +12,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Configure git user
         run: |
-          git config --global user.name 'github-actions'
-          git config --global user.email 'github-actions@users.noreply.github.com'
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
       - name: Build target/release
         run: cargo build --release
+      - name: Write scripts
+        run: echo "./quic-mpc --port 8080 --seed bootstrap-1" > quic-mpc.sh
       - name: Push the release
         run: |
           git checkout --orphan release
           git reset --hard
           cp ./target/release/quic-mpc ./quic-mpc
-          git add quic-mpc
+          git add quic-mpc quic-mpc.sh
           git commit -m "ci: latest release"
           git push origin release --force
     env:
