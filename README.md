@@ -1,4 +1,4 @@
-# rust-libp2p-chat
+# quic-mpc
 
 To connect the boostrap node:
 
