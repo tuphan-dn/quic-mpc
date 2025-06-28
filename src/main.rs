@@ -72,7 +72,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     .set_mode(Some(kad::Mode::Server));
   swarm.listen_on(format!("/ip4/0.0.0.0/udp/{port}/quic-v1").parse()?)?;
 
-  let rand_channel = tx.clone();
   if let Some(bootstrap_addr) = bootstrap {
     // Add peers to the DHT
     swarm
@@ -82,14 +81,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Bootstrap the connection
     if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
       error!("Failed to run Kademlia bootstrap: {e:?}");
+    } else {
+      // Manual ping
+      let rand_channel = tx.clone();
+      spawn(async move {
+        for i in 0..10 {
+          sleep(Duration::from_secs(10)).await;
+          rand_channel.send(format!("index {}", i)).await.unwrap();
+        }
+      });
     }
-  } else {
-    spawn(async move {
-      for i in 0..10 {
-        sleep(Duration::from_secs(10)).await;
-        rand_channel.send(format!("index {}", i)).await.unwrap();
-      }
-    });
   }
 
   // Read full lines from stdin
