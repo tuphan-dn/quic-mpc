@@ -7,7 +7,9 @@ use crate::utils::{
 use futures::stream::StreamExt;
 use libp2p::{SwarmBuilder, autonat, gossipsub, identify, kad};
 use std::{error::Error, time::Duration};
-use tokio::{io, io::AsyncBufReadExt, select};
+use tokio::spawn;
+use tokio::time::sleep;
+use tokio::{select, sync::mpsc};
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
@@ -23,6 +25,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
   let _ = tracing_subscriber::fmt()
     .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
     .try_init();
+  let (tx, mut rx) = mpsc::channel(32);
 
   let keypair = read_keypair()?;
   let mut swarm = SwarmBuilder::with_existing_identity(keypair.clone())
@@ -69,6 +72,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     .set_mode(Some(kad::Mode::Server));
   swarm.listen_on(format!("/ip4/0.0.0.0/udp/{port}/quic-v1").parse()?)?;
 
+  let rand_channel = tx.clone();
   if let Some(bootstrap_addr) = bootstrap {
     // Add peers to the DHT
     swarm
@@ -77,23 +81,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
       .add_address(&parse_peer_id(&bootstrap_addr)?, bootstrap_addr.parse()?);
     // Bootstrap the connection
     if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
-      error!("⛔️ Failed to run Kademlia bootstrap: {e:?}");
+      error!("Failed to run Kademlia bootstrap: {e:?}");
     }
+  } else {
+    spawn(async move {
+      for i in 0..10 {
+        sleep(Duration::from_secs(10)).await;
+        rand_channel.send(format!("index {}", i)).await.unwrap();
+      }
+    });
   }
 
   // Read full lines from stdin
-  let mut stdin = io::BufReader::new(io::stdin()).lines();
   let topic = gossipsub::IdentTopic::new("quic-the-room");
   swarm.behaviour_mut().gossipsub.subscribe(&topic)?;
-  println!("💻 Type to send messages to others here:");
 
   // Kick it off
   loop {
     select! {
-      Ok(Some(msg)) = stdin.next_line() => {
+      Some(msg) = rx.recv() => {
         // Publish messages
         if let Err(er) = swarm.behaviour_mut().gossipsub.publish(topic.clone(), msg.as_bytes()) {
-          error!("❌ Failed to publish the message: {er}");
+          error!("Failed to publish the message: {er}");
         } else {
           info!("🛫 .................. Sent");
         }
