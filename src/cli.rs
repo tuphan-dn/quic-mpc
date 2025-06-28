@@ -12,7 +12,4 @@ pub struct Args {
   /// Port.
   #[arg(short, long, default_value_t = 0)]
   pub port: u16,
-  /// Do not print fallback logs.
-  #[arg(long, default_value_t = false)]
-  pub silent: bool,
 }

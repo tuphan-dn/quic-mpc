@@ -1,51 +1,30 @@
-use cli::{Args, Parser};
-use futures::stream::StreamExt;
-use libp2p::{
-  SwarmBuilder, autonat, gossipsub, identify,
-  identity::Keypair,
-  kad::{self, BootstrapOk, GetClosestPeersOk, Mode, store},
-  swarm::{NetworkBehaviour, SwarmEvent},
+use crate::behaviour::Behaviour;
+use crate::cli::{Args, Parser};
+use crate::utils::{
+  keypair::{parse_peer_id, read_keypair},
+  msg::message_id,
 };
+use futures::stream::StreamExt;
+use libp2p::{SwarmBuilder, autonat, gossipsub, identify, kad};
 use std::{error::Error, time::Duration};
 use tokio::{io, io::AsyncBufReadExt, select};
+use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
+pub mod behaviour;
 pub mod cli;
 pub mod utils;
 
-#[derive(NetworkBehaviour)]
-struct Behaviour {
-  identify: identify::Behaviour,
-  kademlia: kad::Behaviour<store::MemoryStore>,
-  autonat: autonat::Behaviour,
-  gossipsub: gossipsub::Behaviour,
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-  use utils::{
-    msg::message_id,
-    peer::{ed25519_from_seed, parse_peer_id},
-  };
-
   let Args {
-    seed,
-    bootstrap,
-    port,
-    silent,
+    bootstrap, port, ..
   } = Args::parse();
-
-  // Create a random key for ourselves & read user's inputs
-  let keypair = if let Some(s) = seed {
-    ed25519_from_seed(&s)?
-  } else {
-    Keypair::generate_ed25519()
-  };
-
   let _ = tracing_subscriber::fmt()
-    .with_env_filter(EnvFilter::from_default_env())
+    .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
     .try_init();
 
+  let keypair = read_keypair()?;
   let mut swarm = SwarmBuilder::with_existing_identity(keypair.clone())
     .with_tokio()
     .with_quic()
@@ -59,7 +38,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
       // Create a Kademlia behaviour.
       let kademlia = kad::Behaviour::new(
         key.public().to_peer_id(),
-        store::MemoryStore::new(key.public().to_peer_id()),
+        kad::store::MemoryStore::new(key.public().to_peer_id()),
       );
       // Create a AutoNAT behaviour.
       let autonat = autonat::Behaviour::new(key.public().to_peer_id(), Default::default());
@@ -84,7 +63,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     .build();
 
   // Peer node: Listen on all interfaces and whatever port the OS assigns
-  swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server));
+  swarm
+    .behaviour_mut()
+    .kademlia
+    .set_mode(Some(kad::Mode::Server));
   swarm.listen_on(format!("/ip4/0.0.0.0/udp/{port}/quic-v1").parse()?)?;
 
   if let Some(bootstrap_addr) = bootstrap {
@@ -95,7 +77,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
       .add_address(&parse_peer_id(&bootstrap_addr)?, bootstrap_addr.parse()?);
     // Bootstrap the connection
     if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
-      println!("⛔️ Failed to run Kademlia bootstrap: {e:?}");
+      error!("⛔️ Failed to run Kademlia bootstrap: {e:?}");
     }
   }
 
@@ -111,72 +93,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
       Ok(Some(msg)) = stdin.next_line() => {
         // Publish messages
         if let Err(er) = swarm.behaviour_mut().gossipsub.publish(topic.clone(), msg.as_bytes()) {
-          println!("❌ Failed to publish the message: {er}");
+          error!("❌ Failed to publish the message: {er}");
         } else {
-          println!("🛫 .................. Sent");
+          info!("🛫 .................. Sent");
         }
       }
-      event = swarm.select_next_some() => match event {
-        SwarmEvent::NewListenAddr { address, .. } => {
-          let mut addr = String::from("");
-          addr.push_str(&address.to_string());
-          addr.push_str("/p2p/");
-          addr.push_str(&keypair.public().to_peer_id().to_string());
-          println!("✅ Local node is listening on {addr}");
-        }
-        SwarmEvent::IncomingConnection { send_back_addr, .. } => {
-          println!("⏳ Connecting to {send_back_addr}");
-        }
-        SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-          println!("🔗 Connected to {peer_id}");
-        }
-        SwarmEvent::ConnectionClosed { peer_id, .. } => {
-          println!("💔 Disconnected to {peer_id}");
-        }
-        // Identify
-        SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Received {
-          peer_id,
-          info,
-          ..
-        })) => {
-          println!("👤 Identify new peer: {peer_id}");
-          if info.protocols.iter().any(|p| *p == kad::PROTOCOL_NAME) {
-            for addr in info.listen_addrs {
-              swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
-            }
-          }
-        }
-        // Kademlia
-        SwarmEvent::Behaviour(BehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed {
-          result: kad::QueryResult::Bootstrap(Ok(BootstrapOk { peer: peer_id, .. })),
-          ..
-        })) => {
-          if peer_id != keypair.public().to_peer_id() {
-            println!("🚀 Kademlia bootstrapped completely: {peer_id:?}");
-          }
-        }
-        SwarmEvent::Behaviour(BehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed {
-          result: kad::QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { peers, .. })),
-          ..
-        })) => {
-          println!("🔍 Kademlia discovered new peers: {peers:?}");
-        }
-        // Gossipsub
-        SwarmEvent::Behaviour(BehaviourEvent::Gossipsub(gossipsub::Event::Message {
-          propagation_source: peer_id,
-          message,
-          ..
-        })) => {
-          let msg = String::from_utf8_lossy(&message.data);
-          println!("💌 Message from {peer_id}: {msg}");
-        }
-        // Others
-        _ => {
-          if silent != true {
-            println!("❓ Other Behaviour events {event:?}");
-          }
-        }
-      }
+      event = swarm.select_next_some() => behaviour::handle_events(&mut swarm, event)
     }
   }
 }
