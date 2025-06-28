@@ -31,6 +31,8 @@ git clone -b release https://github.com/tuphan-dn/quic-mpc.git
 ### Update
 
 ```bash
+git fetch origin
+git checkout release
 git reset --hard origin/release
 ```
 
