@@ -90,15 +90,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
           rand_channel.send(format!("ping {}", i)).unwrap();
         }
       });
-      // General events
-      let mut event_channel = tx.subscribe();
-      spawn(async move {
-        while let Ok(msg) = event_channel.recv().await {
-          println!("Event: {}", msg);
-        }
-      });
     }
   }
+
+  // General events
+  let mut event_channel = tx.subscribe();
+  spawn(async move {
+    while let Ok(msg) = event_channel.recv().await {
+      println!("Event: {}", msg);
+    }
+  });
 
   // Read full lines from stdin
   let topic = gossipsub::IdentTopic::new("quic-the-room");
