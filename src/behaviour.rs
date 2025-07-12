@@ -16,7 +16,7 @@ pub struct Behaviour {
 pub fn handle_events(
   swarm: &mut Swarm<Behaviour>,
   event: SwarmEvent<BehaviourEvent>,
-  channel: Sender<String>,
+  tx: Sender<String>,
 ) -> () {
   match event {
     SwarmEvent::NewListenAddr { address, .. } => {
@@ -71,7 +71,7 @@ pub fn handle_events(
       ..
     })) => {
       let msg = String::from_utf8_lossy(&message.data);
-      channel.send(format!("event {peer_id} {msg}")).unwrap();
+      tx.send(format!("event {peer_id} {msg}")).unwrap();
     }
     // Others
     _ => {

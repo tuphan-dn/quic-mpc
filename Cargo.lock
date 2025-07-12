@@ -2250,6 +2250,8 @@ dependencies = [
  "clap",
  "futures",
  "libp2p",
+ "once_cell",
+ "serde",
  "sha3",
  "tokio",
  "tracing",

@@ -1,6 +1,7 @@
 use crate::{
   behaviour::Behaviour,
   cli::{Args, Parser},
+  pubsub::tx,
   utils::{
     keypair::{parse_peer_id, read_keypair},
     msg::message_id,
@@ -9,12 +10,13 @@ use crate::{
 use futures::stream::StreamExt;
 use libp2p::{SwarmBuilder, autonat, gossipsub, identify, kad};
 use std::{error::Error, time::Duration};
-use tokio::{select, spawn, sync::broadcast, time::sleep};
+use tokio::{select, spawn, time::sleep};
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
 pub mod behaviour;
 pub mod cli;
+pub mod pubsub;
 pub mod utils;
 
 #[tokio::main]
@@ -25,7 +27,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
   let _ = tracing_subscriber::fmt()
     .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
     .try_init();
-  let (tx, mut rx) = broadcast::channel(32);
 
   let keypair = read_keypair()?;
   let mut swarm = SwarmBuilder::with_existing_identity(keypair.clone())
@@ -83,7 +84,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
       error!("Failed to run Kademlia bootstrap: {e:?}");
     } else {
       // Manual ping
-      let rand_channel = tx.clone();
+      let rand_channel = tx();
       spawn(async move {
         for i in 0..10 {
           sleep(Duration::from_secs(10)).await;
@@ -94,7 +95,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
   }
 
   // General events
-  let mut event_channel = tx.subscribe();
+  let mut event_channel = tx().subscribe();
   spawn(async move {
     while let Ok(msg) = event_channel.recv().await {
       println!("Event: {}", msg);
@@ -106,6 +107,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
   swarm.behaviour_mut().gossipsub.subscribe(&topic)?;
 
   // Kick it off
+  let mut rx = tx().subscribe();
   loop {
     select! {
       Ok(msg) = rx.recv() => {
@@ -119,7 +121,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
           info!("🛫 .................. Sent");
         }
       }
-      event = swarm.select_next_some() => behaviour::handle_events(&mut swarm, event, tx.clone())
+      event = swarm.select_next_some() => behaviour::handle_events(&mut swarm, event, tx())
     }
   }
 }
