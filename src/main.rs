@@ -1,15 +1,15 @@
-use crate::behaviour::Behaviour;
-use crate::cli::{Args, Parser};
-use crate::utils::{
-  keypair::{parse_peer_id, read_keypair},
-  msg::message_id,
+use crate::{
+  behaviour::Behaviour,
+  cli::{Args, Parser},
+  utils::{
+    keypair::{parse_peer_id, read_keypair},
+    msg::message_id,
+  },
 };
 use futures::stream::StreamExt;
 use libp2p::{SwarmBuilder, autonat, gossipsub, identify, kad};
 use std::{error::Error, time::Duration};
-use tokio::spawn;
-use tokio::time::sleep;
-use tokio::{select, sync::mpsc};
+use tokio::{select, spawn, sync::broadcast, time::sleep};
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
   let _ = tracing_subscriber::fmt()
     .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
     .try_init();
-  let (tx, mut rx) = mpsc::channel(32);
+  let (tx, mut rx) = broadcast::channel(32);
 
   let keypair = read_keypair()?;
   let mut swarm = SwarmBuilder::with_existing_identity(keypair.clone())
@@ -87,7 +87,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
       spawn(async move {
         for i in 0..10 {
           sleep(Duration::from_secs(10)).await;
-          rand_channel.send(format!("index {}", i)).await.unwrap();
+          rand_channel.send(format!("ping {}", i)).unwrap();
+        }
+      });
+      // General events
+      let mut event_channel = tx.subscribe();
+      spawn(async move {
+        while let Ok(msg) = event_channel.recv().await {
+          println!("Event: {}", msg);
         }
       });
     }
@@ -100,15 +107,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
   // Kick it off
   loop {
     select! {
-      Some(msg) = rx.recv() => {
+      Ok(msg) = rx.recv() => {
         // Publish messages
-        if let Err(er) = swarm.behaviour_mut().gossipsub.publish(topic.clone(), msg.as_bytes()) {
+        let t: Vec<&str> = msg.split(" ").collect();
+        if t[0] != "ping" {
+          // Skip
+        } else if let Err(er) = swarm.behaviour_mut().gossipsub.publish(topic.clone(), msg.as_bytes()) {
           error!("Failed to publish the message: {er}");
         } else {
           info!("🛫 .................. Sent");
         }
       }
-      event = swarm.select_next_some() => behaviour::handle_events(&mut swarm, event)
+      event = swarm.select_next_some() => behaviour::handle_events(&mut swarm, event, tx.clone())
     }
   }
 }

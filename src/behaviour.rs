@@ -2,6 +2,7 @@ use libp2p::{
   Swarm, autonat, gossipsub, identify, kad,
   swarm::{NetworkBehaviour, SwarmEvent},
 };
+use tokio::sync::broadcast::Sender;
 use tracing::{debug, info};
 
 #[derive(NetworkBehaviour)]
@@ -12,7 +13,11 @@ pub struct Behaviour {
   pub gossipsub: gossipsub::Behaviour,
 }
 
-pub fn handle_events(swarm: &mut Swarm<Behaviour>, event: SwarmEvent<BehaviourEvent>) -> () {
+pub fn handle_events(
+  swarm: &mut Swarm<Behaviour>,
+  event: SwarmEvent<BehaviourEvent>,
+  channel: Sender<String>,
+) -> () {
   match event {
     SwarmEvent::NewListenAddr { address, .. } => {
       let addr = format!(
@@ -66,7 +71,7 @@ pub fn handle_events(swarm: &mut Swarm<Behaviour>, event: SwarmEvent<BehaviourEv
       ..
     })) => {
       let msg = String::from_utf8_lossy(&message.data);
-      info!("💌 Message from {peer_id}: {msg}");
+      channel.send(format!("event {peer_id} {msg}")).unwrap();
     }
     // Others
     _ => {
