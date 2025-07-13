@@ -1,8 +1,11 @@
+use crate::{
+  model::{event_model::EventModel, ping_model::PingModel},
+  pubsub::Topic,
+};
 use libp2p::{
   Swarm, autonat, gossipsub, identify, kad,
   swarm::{NetworkBehaviour, SwarmEvent},
 };
-use tokio::sync::broadcast::Sender;
 use tracing::{debug, info};
 
 #[derive(NetworkBehaviour)]
@@ -13,11 +16,7 @@ pub struct Behaviour {
   pub gossipsub: gossipsub::Behaviour,
 }
 
-pub fn handle_events(
-  swarm: &mut Swarm<Behaviour>,
-  event: SwarmEvent<BehaviourEvent>,
-  tx: Sender<String>,
-) -> () {
+pub fn handle_events(swarm: &mut Swarm<Behaviour>, event: SwarmEvent<BehaviourEvent>) -> () {
   match event {
     SwarmEvent::NewListenAddr { address, .. } => {
       let addr = format!(
@@ -66,12 +65,16 @@ pub fn handle_events(
     }
     // Gossipsub
     SwarmEvent::Behaviour(BehaviourEvent::Gossipsub(gossipsub::Event::Message {
-      propagation_source: peer_id,
+      propagation_source: _peer_id,
       message,
       ..
     })) => {
-      let msg = String::from_utf8_lossy(&message.data);
-      tx.send(format!("event {peer_id} {msg}")).unwrap();
+      let event_model: EventModel = bincode::deserialize(&message.data).unwrap();
+      let ping_topic = Topic::<PingModel>::new(PingModel::get_topic());
+      if PingModel::is_topic(&event_model.topic) {
+        let data: PingModel = bincode::deserialize(&event_model.data).unwrap();
+        ping_topic.publish(&data).unwrap();
+      }
     }
     // Others
     _ => {

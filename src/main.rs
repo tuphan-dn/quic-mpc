@@ -1,7 +1,8 @@
 use crate::{
   behaviour::Behaviour,
   cli::{Args, Parser},
-  pubsub::tx,
+  model::{event_model::EventModel, ping_model::PingModel},
+  pubsub::Topic,
   utils::{
     keypair::{parse_peer_id, read_keypair},
     msg::message_id,
@@ -16,6 +17,7 @@ use tracing_subscriber::EnvFilter;
 
 pub mod behaviour;
 pub mod cli;
+pub mod model;
 pub mod pubsub;
 pub mod utils;
 
@@ -84,44 +86,46 @@ async fn main() -> Result<(), Box<dyn Error>> {
       error!("Failed to run Kademlia bootstrap: {e:?}");
     } else {
       // Manual ping
-      let rand_channel = tx();
-      spawn(async move {
+      spawn(async {
+        let event_topic = Topic::<EventModel>::new(EventModel::get_topic());
         for i in 0..10 {
           sleep(Duration::from_secs(10)).await;
-          rand_channel.send(format!("ping {}", i)).unwrap();
+          event_topic
+            .publish(&EventModel {
+              topic: "ping".into(),
+              data: bincode::serialize(&PingModel { rand: i }).unwrap(),
+            })
+            .unwrap();
         }
       });
     }
   }
 
   // General events
-  let mut event_channel = tx().subscribe();
-  spawn(async move {
-    while let Ok(msg) = event_channel.recv().await {
-      println!("Event: {}", msg);
+  spawn(async {
+    let ping_topic = Topic::<PingModel>::new(PingModel::get_topic());
+    while let Ok(msg) = ping_topic.subscribe().await {
+      println!("Event: {:?}", msg);
     }
   });
 
   // Read full lines from stdin
-  let topic = gossipsub::IdentTopic::new("quic-the-room");
-  swarm.behaviour_mut().gossipsub.subscribe(&topic)?;
+  let room = gossipsub::IdentTopic::new("quic-the-room");
+  swarm.behaviour_mut().gossipsub.subscribe(&room)?;
 
   // Kick it off
-  let mut rx = tx().subscribe();
+  let event_topic = Topic::<EventModel>::new(EventModel::get_topic());
   loop {
     select! {
-      Ok(msg) = rx.recv() => {
+      Ok(msg) = event_topic.subscribe() => {
         // Publish messages
-        let t: Vec<&str> = msg.split(" ").collect();
-        if t[0] != "ping" {
-          // Skip
-        } else if let Err(er) = swarm.behaviour_mut().gossipsub.publish(topic.clone(), msg.as_bytes()) {
+        if let Err(er) = swarm.behaviour_mut().gossipsub.publish(room.clone(), msg.data) {
           error!("Failed to publish the message: {er}");
         } else {
           info!("🛫 .................. Sent");
         }
       }
-      event = swarm.select_next_some() => behaviour::handle_events(&mut swarm, event, tx())
+      event = swarm.select_next_some() => behaviour::handle_events(&mut swarm, event)
     }
   }
 }
